@@ -111,7 +111,7 @@
 	function sendAudioToServer(blob) {
 		var url = URL.createObjectURL(blob);
 		
-		socket.emit('catch-frame', data);
+		socket.emit('catch-frame', data: url);
 	}
 
 
