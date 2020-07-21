@@ -109,9 +109,13 @@
 	}
 	
 	function sendAudioToServer(blob) {
-		var data = URL.createObjectURL(blob);
 		
-		socket.emit('catch-frame', data);
+		var reader = new FileReader();
+		reader.onload = (e) => {
+			socket.emit('catch-frame', e.target.result);
+		};
+		var source = reader.readAsDataURL(blob);
+		
 	}
 
 
