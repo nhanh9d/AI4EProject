@@ -3,7 +3,6 @@
 <html>
   <head>
     <meta http-equiv="Content-Type" const="text/html;charset=UTF-8" />
-    <link rel="stylesheet" type="text/css" href="style.css" >
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
     <title>Simple Chat App</title>
   </head>
@@ -18,7 +17,9 @@
 <div class = 'video'>
     <img id="image">
 </div>
-<script src="https://docs.opencv.org/4.2.0/opencv.js"></script>
+<!-- <script src="https://docs.opencv.org/4.2.0/opencv.js"></script> -->
+
+  	<script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
     <script src="http://code.jquery.com/jquery-latest.min.js"></script>
 <script>
     var socket = io('http://127.0.0.1:5000');
@@ -28,51 +29,90 @@
     });
 	
 	let recordedChunks = [];
+	
+	var gumStream; 						//stream from getUserMedia()
+	var rec; 							//Recorder.js object
+	var input; 							//MediaStreamAudioSourceNode we'll be recording
+	var accepted = false;
+	var decline = false;
+		
+	//MediaStreamAudioSourceNode we'll be recording 
+	// shim for AudioContext when it's not avb. 
+	var AudioContext = window.AudioContext || window.webkitAudioContext;
+	var audioContext = new AudioContext;
 
     if (navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({ audio: true })
         .then(function (stream) {
-			if(!mediaRecorder){
-				mediaRecorder = new MediaRecorder(stream, options);
-			}
+			/*
+				create an audio context after getUserMedia is called
+				sampleRate might change after getUserMedia is called, like it does on macOS when recording through AirPods
+				the sampleRate defaults to the one set in your OS for your playback device
+			*/
+			audioContext = new AudioContext();
+
+			/*  assign to gumStream for later use  */
+			gumStream = stream;
+		
+			/* use the stream */
+			input = audioContext.createMediaStreamSource(stream);
 			
-			if(!mediaRecorder.ondataavailable){
-				mediaRecorder.ondataavailable = function (e) {
-					if (e.data.size > 0) {
-						recordedChunks.push(e.data);
-					}
-				};
-			}
-			
-			if(!mediaRecorder.onstop){
-				mediaRecorder.onstop = getData;
-			}
-			
-			mediaRecorder.onstop = getData;
-			
-			mediaRecorder.start();
+			/* 
+				Create the Recorder object and configure to record mono sound (1 channel)
+				Recording 2 channels  will double the file size
+			*/
+			rec = new Recorder(input,{numChannels:1})
+
+			//start the recording process
+			rec.record()
+
+			accepted = true;
         })
+		
+		
         .catch(function (er) {
             console.log(er)
             console.log("Something went wrong!");
+			decline = true;
         });
     }
+	
+	//check if user has accepted
+	setInterval(checkAccepted, 100)
+	
+	//call back
+	function checkAccepted(){
+		if(accepted){
+			clearInterval(checkAccepted);
+			getData();
+		}
+		if(decline){
+			clearInterval(checkAccepted);
+		}
+	}
+	
+	function getData() {
+		setInterval(() => {
+			//pause
+			rec.stop();
+			
+			//stop microphone access
+			gumStream.getAudioTracks()[0].stop();
 
-    // let src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
-    // let dst = new cv.Mat(video.height, video.width, cv.CV_8UC1);
-    // let cap = new cv.VideoCapture(video);
+			//create the wav blob and pass it on to createDownloadLink
+			rec.exportWAV(sendAudioToServer);
+			
+			//resume
+			rec.record()
 
-    const FPS = 22;
-
-    setInterval(() => {
-        cap.read(src);
-
-        var type = "image/png"
-        var data = document.getElementById("canvasOutput").toDataURL(type);
-        data = data.replace('data:' + type + ';base64,', ''); //split off junk at the beginning
-
-        socket.emit('catch-frame', data);
-    }, 10000/FPS);
+		}, 1000);
+	}
+	
+	function sendAudioToServer(blob) {
+		var url = URL.createObjectURL(blob);
+		
+		socket.emit('catch-frame', data);
+	}
 
 
     socket.on('response_back', function(data){
