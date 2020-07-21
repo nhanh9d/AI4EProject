@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" const="text/html;charset=UTF-8" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
+    <title>Simple Chat App</title>
+  </head>
+
+  <body>
+	
+<div id="container">
+    <canvas id="canvasOutput"></canvas>
+    <video autoplay="true" id="videoElement"></video>
+</div>
+
+<div class = 'video'>
+    <img id="image">
+</div>
+<!-- <script src="https://docs.opencv.org/4.2.0/opencv.js"></script> -->
+
+  	<script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
+    <script src="http://code.jquery.com/jquery-latest.min.js"></script>
+<script>
+    var socket = io('http://127.0.0.1:5000');
+
+    socket.on('connect', function(){
+        console.log("Connected...!", socket.connected)
+    });
+	
+	let recordedChunks = [];
+	
+	var gumStream; 						//stream from getUserMedia()
+	var rec; 							//Recorder.js object
+	var input; 							//MediaStreamAudioSourceNode we'll be recording
+	var accepted = false;
+	var decline = false;
+		
+	//MediaStreamAudioSourceNode we'll be recording 
+	// shim for AudioContext when it's not avb. 
+	var AudioContext = window.AudioContext || window.webkitAudioContext;
+	var audioContext = new AudioContext;
+
+    if (navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function (stream) {
+			/*
+				create an audio context after getUserMedia is called
+				sampleRate might change after getUserMedia is called, like it does on macOS when recording through AirPods
+				the sampleRate defaults to the one set in your OS for your playback device
+			*/
+			audioContext = new AudioContext();
+
+			/*  assign to gumStream for later use  */
+			gumStream = stream;
+		
+			/* use the stream */
+			input = audioContext.createMediaStreamSource(stream);
+			
+			/* 
+				Create the Recorder object and configure to record mono sound (1 channel)
+				Recording 2 channels  will double the file size
+			*/
+			rec = new Recorder(input,{numChannels:1})
+
+			//start the recording process
+			rec.record()
+
+			accepted = true;
+        })
+		
+		
+        .catch(function (er) {
+            console.log(er)
+            console.log("Something went wrong!");
+			decline = true;
+        });
+    }
+	
+	//check if user has accepted
+	setInterval(checkAccepted, 100)
+	
+	//call back
+	function checkAccepted(){
+		if(accepted){
+			clearInterval(checkAccepted);
+			getData();
+		}
+		if(decline){
+			clearInterval(checkAccepted);
+		}
+	}
+	
+	function getData() {
+		setInterval(() => {
+			//pause
+			rec.stop();
+			
+			//stop microphone access
+			gumStream.getAudioTracks()[0].stop();
+
+			//create the wav blob and pass it on to createDownloadLink
+			rec.exportWAV(sendAudioToServer);
+			
+			//resume
+			rec.record()
+
+		}, 1000);
+	}
+	
+	function sendAudioToServer(blob) {
+		var data = URL.createObjectURL(blob);
+		
+		socket.emit('catch-frame', data);
+	}
+
+
+    socket.on('response_back', function(data){
+		console.log(data)
+    });
+
+</script>
+  </body>
+</html>
