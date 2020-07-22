@@ -25,7 +25,7 @@ def catch_frame(data):
     ## getting the data frames
     decode = base64.b64decode(b64str)
     
-    wav_file = open("test.wav", "wb")
+    wav_file = open("recorded/test.wav", "wb")
     wav_file.write(decode)
     ## do some processing
 
